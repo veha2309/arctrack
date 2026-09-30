@@ -17,6 +17,11 @@ double weightToKilograms(double value, bool useKg) =>
 
 String weightUnit(bool useKg) => useKg ? 'kg' : 'lb';
 String lengthUnit(bool useKg) => useKg ? 'cm' : 'in';
+String distanceUnit(bool useKg) => useKg ? 'km' : 'mi';
+double distanceForDisplay(double meters, bool useKg) =>
+    useKg ? meters / 1000 : meters / 1609.344;
+double distanceToMeters(double distance, bool useKg) =>
+    distance * (useKg ? 1000 : 1609.344);
 
 double lengthForDisplay(double centimeters, bool useKg) =>
     useKg ? centimeters : centimeters * inchesPerCentimeter;

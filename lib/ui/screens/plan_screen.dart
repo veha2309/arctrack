@@ -26,7 +26,7 @@ class PlanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(appControllerProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Plan'), actions: [
+      appBar: AppBar(title: const Text('Program'), actions: [
         PopupMenuButton<String>(
           onSelected: (value) => _menuAction(context, ref, value),
           itemBuilder: (_) => const [
@@ -37,80 +37,118 @@ class PlanScreen extends ConsumerWidget {
           ],
         )
       ]),
-      floatingActionButton: async.value == null
-          ? null
-          : FloatingActionButton.small(
-              onPressed: () => _newRoutine(context, ref, async.value!),
-              child: const Icon(Icons.add)),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
-        data: (data) => ListView(children: [
-          SectionHeader('Routines',
-              trailing: TextButton.icon(
-                  onPressed: () => _newRoutine(context, ref, data),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('New'))),
-          ...data.templates.where((template) => !template.isRest).map(
-                (template) => Column(children: [
-                  ListTile(
-                    title: Text(template.name),
-                    subtitle: Text('${template.exercises.length} exercises'),
-                    onTap: () {
-                      ref
-                          .read(appControllerProvider.notifier)
-                          .startTemplate(template);
-                      context.go('/workout');
-                    },
-                    trailing: PopupMenuButton<String>(
-                      tooltip: 'Routine actions',
-                      onSelected: (action) {
-                        if (action == 'delete') {
-                          _deleteRoutine(context, ref, template);
-                        }
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                            value: 'delete', child: Text('Delete routine')),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 16),
+        data: (data) => DefaultTabController(
+            length: 3,
+            child: Column(children: [
+              const TabBar(tabs: [
+                Tab(text: 'Routines'),
+                Tab(text: 'Schedule'),
+                Tab(text: 'Exercises')
+              ]),
+              Expanded(
+                  child: TabBarView(children: [
+                ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                    children: [
+                      const Eyebrow('Built for your training'),
+                      const SizedBox(height: 6),
+                      Text('Your routines',
+                          style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                          onPressed: () => _newRoutine(context, ref, data),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create routine')),
+                      const SizedBox(height: 16),
+                      ...data.templates
+                          .where((t) => !t.isRest)
+                          .map((template) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: ArcPanel(
+                                  padding: EdgeInsets.zero,
+                                  child: ListTile(
+                                    contentPadding:
+                                        const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                                    title: Text(template.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w800)),
+                                    subtitle: Text(
+                                        '${template.exercises.length} exercises · Tap to train'),
+                                    onTap: () {
+                                      ref
+                                          .read(appControllerProvider.notifier)
+                                          .startTemplate(template);
+                                      context.go('/workout');
+                                    },
+                                    trailing: PopupMenuButton<String>(
+                                      tooltip: 'Routine actions',
+                                      onSelected: (action) {
+                                        if (action == 'edit')
+                                          _newRoutine(context, ref, data,
+                                              existing: template);
+                                        if (action == 'delete')
+                                          _deleteRoutine(
+                                              context, ref, template);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(
+                                            value: 'edit',
+                                            child: Text('Edit routine')),
+                                        PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text('Delete routine')),
+                                      ],
+                                    ),
+                                  )))),
+                    ]),
+                ListView(children: [
+                  const SectionHeader('Your schedule'),
+                  Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: SegmentedButton<ScheduleMode>(
+                          segments: const [
+                            ButtonSegment(
+                                value: ScheduleMode.rolling,
+                                label: Text('Rolling')),
+                            ButtonSegment(
+                                value: ScheduleMode.weekly,
+                                label: Text('7-day week')),
+                          ],
+                          selected: {
+                            data.scheduleMode
+                          },
+                          showSelectedIcon: false,
+                          onSelectionChanged: (value) => ref
+                              .read(appControllerProvider.notifier)
+                              .setScheduleMode(value.first))),
+                  if (data.scheduleMode == ScheduleMode.rolling)
+                    _RollingEditor(data: data)
+                  else
+                    _WeeklyEditor(data: data),
+                  const SizedBox(height: 30),
                 ]),
-              ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: SegmentedButton<ScheduleMode>(
-              segments: const [
-                ButtonSegment(
-                    value: ScheduleMode.rolling, label: Text('Rolling')),
-                ButtonSegment(
-                    value: ScheduleMode.weekly, label: Text('7-day week')),
-              ],
-              selected: {data.scheduleMode},
-              onSelectionChanged: (value) => ref
-                  .read(appControllerProvider.notifier)
-                  .setScheduleMode(value.first),
-              showSelectedIcon: false,
-            ),
-          ),
-          if (data.scheduleMode == ScheduleMode.rolling)
-            _RollingEditor(data: data)
-          else
-            _WeeklyEditor(data: data),
-          const SectionHeader('Exercise library'),
-          ...data.exercises.map((e) => Column(children: [
-                ListTile(
-                    dense: true,
-                    title: Text(e.name),
-                    subtitle: Text(e.muscle),
-                    trailing: Text(e.kind.name.toUpperCase(),
-                        style: const TextStyle(
-                            color: ArcColors.muted, fontSize: 10))),
-                const Divider(height: 1, indent: 16),
+                ListView(children: [
+                  SectionHeader('Exercise library',
+                      trailing: TextButton.icon(
+                          onPressed: () => _newExercise(context, ref),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('New'))),
+                  ...data.exercises.map((e) => Column(children: [
+                        ListTile(
+                            title: Text(e.name),
+                            subtitle: Text(e.muscle),
+                            trailing: Text(e.kind.name.toUpperCase(),
+                                style: const TextStyle(
+                                    color: ArcColors.muted, fontSize: 10))),
+                        const Divider(height: 1, indent: 16),
+                      ])),
+                  const SizedBox(height: 30),
+                ]),
               ])),
-          const SizedBox(height: 80),
-        ]),
+            ])),
       ),
     );
   }
@@ -371,15 +409,15 @@ Future<void> _newExercise(BuildContext context, WidgetRef ref) async {
               )));
 }
 
-Future<void> _newRoutine(
-    BuildContext context, WidgetRef ref, AppData data) async {
-  final name = TextEditingController();
-  final selected = <String>{};
+Future<void> _newRoutine(BuildContext context, WidgetRef ref, AppData data,
+    {WorkoutTemplate? existing}) async {
+  final name = TextEditingController(text: existing?.name ?? '');
+  final selected = <String>{...?existing?.exercises.map((e) => e.exerciseId)};
   await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-                title: const Text('New routine'),
+                title: Text(existing == null ? 'New routine' : 'Edit routine'),
                 content: SizedBox(
                     width: 420,
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -411,14 +449,26 @@ Future<void> _newRoutine(
                       onPressed: () {
                         if (name.text.trim().isEmpty || selected.isEmpty)
                           return;
-                        ref.read(appControllerProvider.notifier).addTemplate(
-                            name.text.trim(),
-                            selected
-                                .map((id) => TemplateExercise(exerciseId: id))
-                                .toList());
+                        final items = selected
+                            .map((id) =>
+                                existing?.exercises
+                                    .where((e) => e.exerciseId == id)
+                                    .firstOrNull ??
+                                TemplateExercise(exerciseId: id))
+                            .toList();
+                        if (existing == null) {
+                          ref
+                              .read(appControllerProvider.notifier)
+                              .addTemplate(name.text.trim(), items);
+                        } else {
+                          ref
+                              .read(appControllerProvider.notifier)
+                              .updateTemplate(
+                                  existing.id, name.text.trim(), items);
+                        }
                         Navigator.pop(context);
                       },
-                      child: const Text('Create')),
+                      child: Text(existing == null ? 'Create' : 'Save')),
                 ],
               )));
 }

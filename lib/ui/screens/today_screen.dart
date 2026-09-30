@@ -31,104 +31,201 @@ class _TodayBody extends ConsumerWidget {
     final checkIn = data.checkIns
         .where((e) => DateUtils.isSameDay(e.date, DateTime.now()))
         .firstOrNull;
-    final readiness = checkIn?.score ?? _trainingReadiness(data);
     return Scaffold(
       appBar: AppBar(
-          title: const Text('ARCTRACK',
+          title: const Text('ARC / TRACK',
               style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5)),
+                  fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 2)),
           actions: [
-            TextButton(
+            IconButton(
                 onPressed: () => _settings(context, ref, data),
-                child: Text(data.useKg ? 'KG' : 'LB'))
+                icon: const Icon(Icons.tune),
+                tooltip: 'Settings')
           ]),
-      body: ListView(children: [
-        Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Text(DateFormat('EEEE, d MMMM').format(DateTime.now()),
-                style: const TextStyle(color: ArcColors.muted))),
-        Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(template?.name ?? 'No session planned',
-                style: Theme.of(context).textTheme.headlineMedium)),
-        if (data.activeSession != null)
-          Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: FilledButton.icon(
-                  onPressed: () => context.go('/workout'),
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text('Resume ${data.activeSession!.name}')))
-        else if (template != null && !template.isRest)
-          Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: FilledButton(
-                  onPressed: () {
-                    ref
-                        .read(appControllerProvider.notifier)
-                        .startTemplate(template);
-                    context.go('/workout');
-                  },
-                  child: const Text('Start workout')))
-        else if (template?.isRest == true)
-          Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: OutlinedButton(
-                  onPressed: data.scheduleMode == ScheduleMode.rolling
-                      ? () =>
-                          ref.read(appControllerProvider.notifier).skipToday()
-                      : null,
-                  child: Text(data.scheduleMode == ScheduleMode.rolling
-                      ? 'Complete rest day'
-                      : 'Rest scheduled'))),
-        const SectionHeader('Readiness'),
-        Container(
-            decoration: const BoxDecoration(
-                border: Border.symmetric(
-                    horizontal: BorderSide(color: ArcColors.line))),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Metric(
-                  label: 'TODAY',
-                  value: '${readiness.round()}%',
-                  detail:
-                      checkIn == null ? 'Training estimate' : 'From check-in'),
-              Metric(
-                  label: 'LAST SESSION',
-                  value: last == null ? '—' : '${last.workingSets} sets',
-                  detail: last?.name),
-              Metric(
-                  label: '7 DAY LOAD',
-                  value: '${_weekSets(data)}',
-                  detail: 'working sets')
+      body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: [
+            Eyebrow(DateFormat('EEEE, d MMMM').format(DateTime.now()),
+                color: ArcColors.blue),
+            const SizedBox(height: 8),
+            Text(
+                data.activeSession != null
+                    ? 'Finish strong.'
+                    : template?.isRest == true
+                        ? 'Recovery is training.'
+                        : 'Ready to train?',
+                style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: ArcColors.accent,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('TODAY’S SESSION',
+                        style: TextStyle(
+                            color: ArcColors.background,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                            letterSpacing: 1.2)),
+                    const SizedBox(height: 10),
+                    Text(
+                        data.activeSession?.name ??
+                            template?.name ??
+                            'Choose your workout',
+                        style: const TextStyle(
+                            color: ArcColors.background,
+                            fontSize: 29,
+                            fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 6),
+                    Text(
+                        data.activeSession != null
+                            ? '${data.activeSession!.workingSets} completed sets so far'
+                            : template == null
+                                ? 'Build a routine or start from Train.'
+                                : template.isRest
+                                    ? 'Take the day to recharge.'
+                                    : '${template.exercises.length} exercises · Your plan is ready',
+                        style: const TextStyle(color: ArcColors.background)),
+                    const SizedBox(height: 18),
+                    if (data.activeSession != null)
+                      FilledButton.icon(
+                          onPressed: () => context.go('/workout'),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: ArcColors.background,
+                              foregroundColor: ArcColors.text),
+                          icon: const Icon(Icons.arrow_forward),
+                          label: const Text('Resume workout'))
+                    else if (template != null && !template.isRest)
+                      FilledButton.icon(
+                          onPressed: () {
+                            ref
+                                .read(appControllerProvider.notifier)
+                                .startTemplate(template);
+                            context.go('/workout');
+                          },
+                          style: FilledButton.styleFrom(
+                              backgroundColor: ArcColors.background,
+                              foregroundColor: ArcColors.text),
+                          icon: const Icon(Icons.arrow_forward),
+                          label: const Text('Start workout'))
+                    else if (template?.isRest == true &&
+                        data.scheduleMode == ScheduleMode.rolling)
+                      FilledButton(
+                          onPressed: () => ref
+                              .read(appControllerProvider.notifier)
+                              .skipToday(),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: ArcColors.background,
+                              foregroundColor: ArcColors.text),
+                          child: const Text('Complete rest day'))
+                    else
+                      FilledButton(
+                          onPressed: () => context.go('/plan'),
+                          style: FilledButton.styleFrom(
+                              backgroundColor: ArcColors.background,
+                              foregroundColor: ArcColors.text),
+                          child: const Text('Open program')),
+                  ]),
+            ),
+            const SizedBox(height: 24),
+            const Eyebrow('Your momentum'),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                  child: ArcPanel(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                    Text(
+                        '${data.sessions.where((s) => s.complete && DateTime.now().difference(s.startedAt).inDays < 7).length}',
+                        style: const TextStyle(
+                            fontSize: 30, fontWeight: FontWeight.w900)),
+                    const Text('WORKOUTS / 7 DAYS',
+                        style: TextStyle(color: ArcColors.muted, fontSize: 10))
+                  ]))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: ArcPanel(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                    Text('${_weekSets(data)}',
+                        style: const TextStyle(
+                            fontSize: 30, fontWeight: FontWeight.w900)),
+                    const Text('WORKING SETS',
+                        style: TextStyle(color: ArcColors.muted, fontSize: 10))
+                  ]))),
+            ]),
+            const SizedBox(height: 24),
+            Row(children: [
+              const Expanded(child: Eyebrow('Coming up')),
+              TextButton(
+                  onPressed: () => context.go('/plan'),
+                  child: const Text('Edit program'))
+            ]),
+            ArcPanel(
+                padding: EdgeInsets.zero,
+                child: Column(children: _rotationRows(data).toList())),
+            const SizedBox(height: 24),
+            const Eyebrow('Recovery check-in'),
+            const SizedBox(height: 10),
+            ArcPanel(
+                child: Row(children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(
+                        checkIn == null
+                            ? 'How are you feeling?'
+                            : '${checkIn.score.round()} / 100',
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800)),
+                    Text(
+                        checkIn == null
+                            ? 'A quick self-report before you train.'
+                            : 'Your self-reported readiness today.',
+                        style: const TextStyle(
+                            color: ArcColors.muted, fontSize: 12)),
+                  ])),
+              if (checkIn == null)
+                TextButton(
+                    onPressed: () => _checkIn(context, ref),
+                    child: const Text('Check in')),
             ])),
-        Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Text(_guidance(readiness),
-                style: const TextStyle(color: ArcColors.muted, height: 1.4))),
-        if (checkIn == null)
-          Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: OutlinedButton(
-                  onPressed: () => _checkIn(context, ref),
-                  child: const Text('Daily check-in'))),
-        const SectionHeader('Up next'),
-        ..._rotationRows(data),
-        const SectionHeader('Previous'),
-        if (last == null)
-          const EmptyState(
-              title: 'No completed workouts',
-              body: 'Your previous session will appear here.')
-        else
-          ListTile(
-              title: Text(last.name),
-              subtitle: Text(DateFormat('d MMM · H:mm').format(last.startedAt)),
-              trailing: Text(
-                  '${formatWeight(last.volume, data.useKg)} ${weightUnit(data.useKg)}',
-                  style: const TextStyle(fontWeight: FontWeight.w700))),
-        const SizedBox(height: 24),
-      ]),
+            const SizedBox(height: 24),
+            Row(children: [
+              const Expanded(child: Eyebrow('Recent workout')),
+              TextButton(
+                  onPressed: () => context.go('/progress'),
+                  child: const Text('View insights'))
+            ]),
+            if (last == null)
+              const ArcPanel(
+                  child: Text('Your completed workouts will appear here.'))
+            else
+              ArcPanel(
+                  child: Row(children: [
+                const Icon(Icons.history, color: ArcColors.blue),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(last.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      Text(DateFormat('d MMM · H:mm').format(last.startedAt),
+                          style: const TextStyle(
+                              color: ArcColors.muted, fontSize: 12)),
+                    ])),
+                Text('${last.workingSets} sets',
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+              ])),
+          ]),
     );
   }
 
@@ -193,22 +290,10 @@ class _TodayBody extends ConsumerWidget {
   }
 }
 
-double _trainingReadiness(AppData data) {
-  final now = DateTime.now();
-  final sets48h = data.sessions
-      .where((s) => now.difference(s.startedAt).inHours < 48)
-      .fold<int>(0, (a, s) => a + s.workingSets);
-  return (92 - sets48h * 1.6).clamp(35, 92);
-}
-
 int _weekSets(AppData data) => data.sessions
-    .where((s) => DateTime.now().difference(s.startedAt).inDays < 7)
+    .where(
+        (s) => s.complete && DateTime.now().difference(s.startedAt).inDays < 7)
     .fold(0, (a, s) => a + s.workingSets);
-String _guidance(double score) => score >= 75
-    ? 'Recovery looks sufficient for the planned session. This estimate uses recent training unless you complete a check-in.'
-    : score >= 55
-        ? 'Moderate readiness. Keep the planned session, but adjust load if warm-ups feel unusually difficult.'
-        : 'Recent load is high. Consider reducing working sets or taking a rest day.';
 
 Future<void> _checkIn(BuildContext context, WidgetRef ref) async {
   var sleep = 3;
@@ -258,7 +343,7 @@ Widget _score(String label, int value, ValueChanged<int> onChanged) =>
 Future<void> _settings(BuildContext context, WidgetRef ref, AppData data) =>
     showModalBottomSheet<void>(
         context: context,
-        builder: (context) => SafeArea(
+        builder: (sheetContext) => SafeArea(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
               const ListTile(title: Text('Settings')),
               ListTile(
@@ -266,14 +351,22 @@ Future<void> _settings(BuildContext context, WidgetRef ref, AppData data) =>
                   subtitle: Text(data.useKg ? 'Kilograms' : 'Pounds'),
                   trailing: Switch(
                       value: data.useKg,
-                      onChanged: (_) => ref
-                          .read(appControllerProvider.notifier)
-                          .toggleUnits())),
+                      onChanged: (_) {
+                        ref.read(appControllerProvider.notifier).toggleUnits();
+                        Navigator.pop(sheetContext);
+                      })),
+              ListTile(
+                  title: const Text('Workout history & backup'),
+                  leading: const Icon(Icons.history),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    context.push('/history');
+                  }),
               ListTile(
                   title: const Text('Reset rotation'),
                   onTap: () {
                     ref.read(appControllerProvider.notifier).resetRotation();
-                    Navigator.pop(context);
+                    Navigator.pop(sheetContext);
                   }),
               const SizedBox(height: 12)
             ])));

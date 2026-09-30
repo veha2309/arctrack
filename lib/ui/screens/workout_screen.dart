@@ -20,21 +20,44 @@ class WorkoutScreen extends ConsumerWidget {
           final session = data.activeSession;
           if (session == null)
             return Scaffold(
-                appBar: AppBar(title: const Text('Workout')),
-                body: ListView(children: [
-                  const EmptyState(
-                      title: 'No active workout',
-                      body:
-                          'Start the current session from Today, or select a routine from Plan.'),
-                  const SizedBox(height: 8),
-                  ...data.templates.where((e) => !e.isRest).map((t) => ListTile(
-                      title: Text(t.name),
-                      subtitle: Text('${t.exercises.length} exercises'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => ref
-                          .read(appControllerProvider.notifier)
-                          .startTemplate(t)))
-                ]));
+                appBar: AppBar(title: const Text('Train')),
+                body: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                    children: [
+                      const Eyebrow('Ready when you are',
+                          color: ArcColors.blue),
+                      const SizedBox(height: 8),
+                      Text('Choose your session.',
+                          style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Start any routine. Your previous values will be ready in the log.',
+                          style: TextStyle(color: ArcColors.muted)),
+                      const SizedBox(height: 20),
+                      ...data.templates
+                          .where((e) => !e.isRest)
+                          .map((t) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: ArcPanel(
+                                  padding: EdgeInsets.zero,
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.fromLTRB(
+                                        18, 12, 14, 12),
+                                    title: Text(t.name,
+                                        style: const TextStyle(
+                                            fontSize: 19,
+                                            fontWeight: FontWeight.w800)),
+                                    subtitle:
+                                        Text('${t.exercises.length} exercises'),
+                                    trailing: const CircleAvatar(
+                                        backgroundColor: ArcColors.accent,
+                                        child: Icon(Icons.arrow_forward,
+                                            color: ArcColors.background)),
+                                    onTap: () => ref
+                                        .read(appControllerProvider.notifier)
+                                        .startTemplate(t),
+                                  )))),
+                    ]));
           return _ActiveWorkout(data: data, session: session);
         });
   }
@@ -76,7 +99,7 @@ class _ActiveWorkoutState extends ConsumerState<_ActiveWorkout> {
           title:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(session.name),
-            Text('$completed / $total sets',
+            Text('$completed of $total sets complete',
                 style: const TextStyle(
                     color: ArcColors.muted,
                     fontSize: 11,
@@ -281,6 +304,12 @@ class _ExerciseBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final exercise =
         data.exercises.where((e) => e.id == log.exerciseId).firstOrNull;
+    final priorSessions = data.sessions.where((s) => s.complete).toList()
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    final priorLog = priorSessions
+        .expand((s) => s.exercises)
+        .where((l) => l.exerciseId == log.exerciseId)
+        .firstOrNull;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -313,14 +342,32 @@ class _ExerciseBlock extends ConsumerWidget {
             const Expanded(child: Text('PREVIOUS', style: _head)),
             SizedBox(
                 width: 76,
-                child:
-                    Text(weightUnit(data.useKg).toUpperCase(), style: _head)),
-            const SizedBox(width: 66, child: Text('REPS', style: _head)),
+                child: Text(
+                    exercise?.kind == ExerciseKind.timed
+                        ? 'SECONDS'
+                        : exercise?.kind == ExerciseKind.distance
+                            ? (data.useKg ? 'KM' : 'MI')
+                            : weightUnit(data.useKg).toUpperCase(),
+                    style: _head)),
+            SizedBox(
+                width: 66,
+                child: Text(
+                    exercise?.kind == ExerciseKind.timed ||
+                            exercise?.kind == ExerciseKind.distance
+                        ? ''
+                        : 'REPS',
+                    style: _head)),
             const SizedBox(width: 42)
           ])),
       ...log.sets.asMap().entries.map((entry) => _SetRow(
           log: log,
+          kind: exercise?.kind ?? ExerciseKind.strength,
           set: entry.value,
+          previous: priorLog != null &&
+                  entry.key < priorLog.sets.length &&
+                  priorLog.sets[entry.key].completed
+              ? priorLog.sets[entry.key]
+              : null,
           exerciseIndex: exerciseIndex,
           setIndex: entry.key,
           useKg: data.useKg,
@@ -345,14 +392,18 @@ class _ExerciseBlock extends ConsumerWidget {
 class _SetRow extends ConsumerWidget {
   const _SetRow(
       {required this.log,
+      required this.kind,
       required this.set,
+      required this.previous,
       required this.exerciseIndex,
       required this.setIndex,
       required this.useKg,
       required this.restSeconds,
       required this.onRest});
   final ExerciseLog log;
+  final ExerciseKind kind;
   final LoggedSet set;
+  final LoggedSet? previous;
   final int exerciseIndex;
   final int setIndex;
   final bool useKg;
@@ -387,17 +438,37 @@ class _SetRow extends ConsumerWidget {
                                 : ArcColors.text))),
                 Expanded(
                     child: Text(
-                        set.weightKg == 0
+                        previous == null
                             ? '—'
-                            : '${formatWeight(set.weightKg, useKg)} × ${set.reps}',
+                            : kind == ExerciseKind.timed
+                                ? (previous!.seconds == 0
+                                    ? '—'
+                                    : '${previous!.seconds}s')
+                                : kind == ExerciseKind.distance
+                                    ? (previous!.distanceM == 0
+                                        ? '—'
+                                        : '${distanceForDisplay(previous!.distanceM, useKg).toStringAsFixed(2)} ${distanceUnit(useKg)}')
+                                    : previous!.weightKg == 0
+                                        ? (previous!.reps == 0
+                                            ? '—'
+                                            : '${previous!.reps} reps')
+                                        : '${formatWeight(previous!.weightKg, useKg)} × ${previous!.reps}',
                         style: const TextStyle(
                             color: ArcColors.muted, fontSize: 12))),
                 SizedBox(
                     width: 70,
                     child: TextFormField(
-                        initialValue: set.weightKg == 0
-                            ? ''
-                            : formatWeight(set.weightKg, useKg),
+                        key: ValueKey('${set.id}-${kind.name}-primary'),
+                        initialValue: kind == ExerciseKind.timed
+                            ? (set.seconds == 0 ? '' : '${set.seconds}')
+                            : kind == ExerciseKind.distance
+                                ? (set.distanceM == 0
+                                    ? ''
+                                    : distanceForDisplay(set.distanceM, useKg)
+                                        .toStringAsFixed(2))
+                                : (set.weightKg == 0
+                                    ? ''
+                                    : formatWeight(set.weightKg, useKg)),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         inputFormatters: [
@@ -405,26 +476,35 @@ class _SetRow extends ConsumerWidget {
                         ],
                         onChanged: (v) => _update(
                             ref,
-                            set.copyWith(
-                                weightKg: weightToKilograms(
-                                    double.tryParse(v) ?? 0, useKg))),
+                            kind == ExerciseKind.timed
+                                ? set.copyWith(seconds: int.tryParse(v) ?? 0)
+                                : kind == ExerciseKind.distance
+                                    ? set.copyWith(
+                                        distanceM: distanceToMeters(
+                                            double.tryParse(v) ?? 0, useKg))
+                                    : set.copyWith(
+                                        weightKg: weightToKilograms(
+                                            double.tryParse(v) ?? 0, useKg))),
                         decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 9)))),
                 const SizedBox(width: 6),
-                SizedBox(
-                    width: 60,
-                    child: TextFormField(
-                        initialValue: set.reps == 0 ? '' : '${set.reps}',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        onChanged: (v) => _update(
-                            ref, set.copyWith(reps: int.tryParse(v) ?? 0)),
-                        decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 9)))),
+                if (kind != ExerciseKind.timed && kind != ExerciseKind.distance)
+                  SizedBox(
+                      width: 60,
+                      child: TextFormField(
+                          initialValue: set.reps == 0 ? '' : '${set.reps}',
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          onChanged: (v) => _update(
+                              ref, set.copyWith(reps: int.tryParse(v) ?? 0)),
+                          decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 9)))),
+                if (kind == ExerciseKind.timed || kind == ExerciseKind.distance)
+                  const SizedBox(width: 66),
                 SizedBox(
                     width: 42,
                     child: IconButton(

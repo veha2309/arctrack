@@ -49,13 +49,17 @@ class AppController extends AsyncNotifier<AppData> {
     final logs = template.exercises.map((item) {
       final previous = _previousLog(item.exerciseId);
       final sets = List.generate(item.sets, (i) {
-        final old = previous != null && i < previous.sets.length
+        final old = previous != null &&
+                i < previous.sets.length &&
+                previous.sets[i].completed
             ? previous.sets[i]
             : null;
         return LoggedSet(
             id: _uuid.v4(),
             weightKg: old?.weightKg ?? 0,
-            reps: old?.reps ?? item.reps);
+            reps: old?.reps ?? item.reps,
+            seconds: old?.seconds ?? 0,
+            distanceM: old?.distanceM ?? 0);
       });
       return ExerciseLog(
           id: _uuid.v4(),
@@ -73,7 +77,11 @@ class AppController extends AsyncNotifier<AppData> {
   }
 
   ExerciseLog? _previousLog(String exerciseId) {
-    for (final session in state.requireValue.sessions) {
+    final sessions = state.requireValue.sessions
+        .where((s) => s.complete)
+        .toList()
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    for (final session in sessions) {
       for (final log in session.exercises) {
         if (log.exerciseId == exerciseId) return log;
       }
@@ -97,7 +105,11 @@ class AppController extends AsyncNotifier<AppData> {
     final sets = [...exercises[exerciseIndex].sets];
     final last = sets.isEmpty ? null : sets.last;
     sets.add(LoggedSet(
-        id: _uuid.v4(), weightKg: last?.weightKg ?? 0, reps: last?.reps ?? 8));
+        id: _uuid.v4(),
+        weightKg: last?.weightKg ?? 0,
+        reps: last?.reps ?? 8,
+        seconds: last?.seconds ?? 0,
+        distanceM: last?.distanceM ?? 0));
     exercises[exerciseIndex] = exercises[exerciseIndex].copyWith(sets: sets);
     _set(data.copyWith(activeSession: session.copyWith(exercises: exercises)));
   }
@@ -118,13 +130,17 @@ class AppController extends AsyncNotifier<AppData> {
         !data.exercises.any((exercise) => exercise.id == exerciseId)) return;
     final previous = _previousLog(exerciseId);
     final sets = List.generate(3, (index) {
-      final old = previous != null && index < previous.sets.length
+      final old = previous != null &&
+              index < previous.sets.length &&
+              previous.sets[index].completed
           ? previous.sets[index]
           : null;
       return LoggedSet(
         id: _uuid.v4(),
         weightKg: old?.weightKg ?? 0,
         reps: old?.reps ?? 8,
+        seconds: old?.seconds ?? 0,
+        distanceM: old?.distanceM ?? 0,
       );
     });
     final exercises = [...session.exercises];
@@ -244,6 +260,22 @@ class AppController extends AsyncNotifier<AppData> {
     _set(d.copyWith(
         templates: [...d.templates, template],
         rotation: [...d.rotation, template.id]));
+  }
+
+  void updateTemplate(
+      String id, String name, List<TemplateExercise> exercises) {
+    final data = state.requireValue;
+    final original = data.templates.where((t) => t.id == id).firstOrNull;
+    if (original == null ||
+        original.isRest ||
+        name.trim().isEmpty ||
+        exercises.isEmpty) return;
+    final templates = data.templates
+        .map((t) => t.id == id
+            ? WorkoutTemplate(id: id, name: name.trim(), exercises: exercises)
+            : t)
+        .toList();
+    _set(data.copyWith(templates: templates));
   }
 
   void deleteTemplate(String templateId) {

@@ -11,7 +11,8 @@ provider.
 
 ## Features
 
-- Five main areas: Today, Plan, Workout, Progress, and History.
+- Four main areas: Home, Train, Program, and Insights. Workout history and
+  backup remain available from Insights and settings.
 - Rolling training rotations with repeatable rest days.
 - Fixed seven-day weekly schedules, including rest and unscheduled days.
 - Custom exercises and reusable workout routines.
@@ -32,35 +33,35 @@ provider.
 
 ## Main areas
 
-### Today
+### Home
 
-Shows the pending workout, readiness guidance, recent relevant performance, and
-the next items in the active schedule. A missed day does not silently advance a
-rolling rotation.
+Shows the next workout, a direct start or resume action, recent training
+momentum, the upcoming schedule, and an optional self-reported recovery
+check-in. A missed day does not silently advance a rolling rotation.
 
-### Plan
+### Program
 
-Create routines and exercises, choose between a rolling rotation and fixed
-weekly schedule, add rest days, reorder rotation entries, or import a complete
-plan from Excel. Deleting a routine removes its schedule references but keeps
-historical workouts.
+Create or edit routines, manage exercises, choose between a rolling rotation
+and fixed weekly schedule, add rest days, reorder rotation entries, or import a
+complete plan from Excel. Deleting a routine removes its schedule references
+but keeps historical workouts.
 
-### Workout
+### Train
 
 Log weight and repetitions, complete sets, add or remove sets, access optional
 set details, and run the configured rest timer. Exercises can be appended or
 inserted after a particular movement during the session. Changes are autosaved.
 
-### Progress
+### Insights
 
-Displays training volume, frequency, streaks, exercise trends, body metrics,
-records, and recovery information using restrained charts and deterministic
-calculations.
+Compares four-week workout frequency, shows weekly workouts or working sets on
+their own scale, and charts exercise trends with dated sessions and range
+filters. It also includes body-weight trends and personal records.
 
 ### History
 
-Review or delete completed workouts, export CSV/JSON, restore a JSON backup, and
-configure automatic backup.
+Open from Insights or Home settings to review or delete completed workouts,
+export CSV/JSON, restore a JSON backup, and configure automatic backup.
 
 ## Backup and restore
 

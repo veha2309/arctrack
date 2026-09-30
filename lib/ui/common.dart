@@ -59,3 +59,37 @@ class EmptyState extends StatelessWidget {
             style: const TextStyle(color: ArcColors.muted))
       ]));
 }
+
+class ArcPanel extends StatelessWidget {
+  const ArcPanel(
+      {super.key,
+      required this.child,
+      this.padding = const EdgeInsets.all(18),
+      this.color});
+  final Widget child;
+  final EdgeInsets padding;
+  final Color? color;
+  @override
+  Widget build(BuildContext context) => Material(
+        color: color ?? ArcColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: ArcColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(padding: padding, child: child),
+      );
+}
+
+class Eyebrow extends StatelessWidget {
+  const Eyebrow(this.text, {super.key, this.color = ArcColors.muted});
+  final String text;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Text(text.toUpperCase(),
+      style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2));
+}

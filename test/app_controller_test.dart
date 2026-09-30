@@ -61,6 +61,71 @@ void main() {
     data = container.read(appControllerProvider).requireValue;
     expect(data.sessions, isEmpty);
   });
+
+  test('timed and distance values carry into the next workout', () async {
+    final previous = WorkoutSession(
+      id: 'previous',
+      name: 'Cardio',
+      startedAt: DateTime(2026, 9, 1),
+      completedAt: DateTime(2026, 9, 1),
+      exercises: const [
+        ExerciseLog(id: 'timed', exerciseId: 'plank', sets: [
+          LoggedSet(id: 'one', seconds: 75, completed: true),
+        ]),
+        ExerciseLog(id: 'distance', exerciseId: 'run', sets: [
+          LoggedSet(id: 'two', distanceM: 3200, completed: true),
+        ]),
+      ],
+    );
+    final initial = seedData().copyWith(sessions: [previous]);
+    final container = ProviderContainer(overrides: [
+      repositoryProvider.overrideWithValue(_MemoryRepository(initial)),
+    ]);
+    addTearDown(container.dispose);
+    await container.read(appControllerProvider.future);
+    container
+        .read(appControllerProvider.notifier)
+        .startTemplate(const WorkoutTemplate(
+          id: 'cardio',
+          name: 'Cardio',
+          exercises: [
+            TemplateExercise(exerciseId: 'plank', sets: 1),
+            TemplateExercise(exerciseId: 'run', sets: 1),
+          ],
+        ));
+    final logs = container
+        .read(appControllerProvider)
+        .requireValue
+        .activeSession!
+        .exercises;
+    expect(logs[0].sets.single.seconds, 75);
+    expect(logs[1].sets.single.distanceM, 3200);
+  });
+
+  test('editing a routine retains its identity and historical workouts',
+      () async {
+    final previous = WorkoutSession(
+        id: 'old',
+        name: 'Push',
+        startedAt: DateTime(2026, 1, 1),
+        completedAt: DateTime(2026, 1, 1),
+        templateId: 'push',
+        exercises: const []);
+    final container = ProviderContainer(overrides: [
+      repositoryProvider.overrideWithValue(
+          _MemoryRepository(seedData().copyWith(sessions: [previous]))),
+    ]);
+    addTearDown(container.dispose);
+    await container.read(appControllerProvider.future);
+    container.read(appControllerProvider.notifier).updateTemplate('push',
+        'Push A', const [TemplateExercise(exerciseId: 'bench', sets: 5)]);
+    final result = container.read(appControllerProvider).requireValue;
+    expect(result.templates.first.id, 'push');
+    expect(result.templates.first.name, 'Push A');
+    expect(result.templates.first.exercises.single.sets, 5);
+    expect(result.sessions.single.id, 'old');
+    expect(result.rotation.first, 'push');
+  });
 }
 
 class _MemoryRepository implements AppRepository {

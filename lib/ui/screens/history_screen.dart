@@ -359,7 +359,24 @@ class _SessionTile extends StatelessWidget {
         final exercise =
             data.exercises.where((e) => e.id == log.exerciseId).firstOrNull;
         final best = log.sets.where((s) => s.completed).fold<LoggedSet?>(null,
-            (best, s) => best == null || s.volume > best.volume ? s : best);
+            (best, s) {
+          if (best == null) return s;
+          final score = exercise?.kind == ExerciseKind.timed
+              ? s.seconds.toDouble()
+              : exercise?.kind == ExerciseKind.distance
+                  ? s.distanceM
+                  : exercise?.kind == ExerciseKind.bodyweight
+                      ? s.reps.toDouble()
+                      : s.volume;
+          final previous = exercise?.kind == ExerciseKind.timed
+              ? best.seconds.toDouble()
+              : exercise?.kind == ExerciseKind.distance
+                  ? best.distanceM
+                  : exercise?.kind == ExerciseKind.bodyweight
+                      ? best.reps.toDouble()
+                      : best.volume;
+          return score > previous ? s : best;
+        });
         return ListTile(
             dense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -368,7 +385,13 @@ class _SessionTile extends StatelessWidget {
                 '${log.sets.where((s) => s.completed).length} completed sets'),
             trailing: best == null
                 ? null
-                : Text(
-                    '${formatWeight(best.weightKg, data.useKg)} ${weightUnit(data.useKg)} × ${best.reps}'));
+                : Text(exercise?.kind == ExerciseKind.timed
+                    ? '${best.seconds}s'
+                    : exercise?.kind == ExerciseKind.distance
+                        ? '${distanceForDisplay(best.distanceM, data.useKg).toStringAsFixed(2)} ${distanceUnit(data.useKg)}'
+                        : exercise?.kind == ExerciseKind.bodyweight &&
+                                best.weightKg == 0
+                            ? '${best.reps} reps'
+                            : '${formatWeight(best.weightKg, data.useKg)} ${weightUnit(data.useKg)} × ${best.reps}'));
       }).toList());
 }

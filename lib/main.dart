@@ -28,9 +28,8 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
               GoRoute(
                   path: '/progress',
                   builder: (_, __) => const ProgressScreen()),
-              GoRoute(
-                  path: '/history', builder: (_, __) => const HistoryScreen()),
             ]),
+        GoRoute(path: '/history', builder: (_, __) => const HistoryScreen()),
       ],
     ));
 
@@ -54,7 +53,7 @@ class AppShell extends StatefulWidget {
   final String location;
   final Widget child;
   final VoidCallback? exitApp;
-  static const paths = ['/today', '/plan', '/workout', '/progress', '/history'];
+  static const paths = ['/today', '/workout', '/plan', '/progress'];
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -111,7 +110,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final index = AppShell.paths.indexOf(widget.location).clamp(0, 4);
+    final index = AppShell.paths.indexOf(widget.location).clamp(0, 3);
     return BackButtonListener(
       onBackButtonPressed: _handleFlutterBackButton,
       child: Scaffold(
@@ -121,23 +120,21 @@ class _AppShellState extends State<AppShell> {
               onDestinationSelected: (i) => context.go(AppShell.paths[i]),
               destinations: const [
                 NavigationDestination(
-                    icon: Icon(Icons.today_outlined),
-                    selectedIcon: Icon(Icons.today),
-                    label: 'Today'),
-                NavigationDestination(
-                    icon: Icon(Icons.view_list_outlined),
-                    selectedIcon: Icon(Icons.view_list),
-                    label: 'Plan'),
+                    icon: Icon(Icons.grid_view_outlined),
+                    selectedIcon: Icon(Icons.grid_view_rounded),
+                    label: 'Home'),
                 NavigationDestination(
                     icon: Icon(Icons.fitness_center_outlined),
                     selectedIcon: Icon(Icons.fitness_center),
-                    label: 'Workout'),
+                    label: 'Train'),
+                NavigationDestination(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month),
+                    label: 'Program'),
                 NavigationDestination(
                     icon: Icon(Icons.insights_outlined),
                     selectedIcon: Icon(Icons.insights),
-                    label: 'Progress'),
-                NavigationDestination(
-                    icon: Icon(Icons.history), label: 'History'),
+                    label: 'Insights'),
               ])),
     );
   }
