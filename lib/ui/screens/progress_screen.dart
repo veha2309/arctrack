@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_ui_components/liquid_ui_components.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +10,7 @@ import '../../domain/analytics.dart';
 import '../../domain/models.dart';
 import '../common.dart';
 import '../theme.dart';
+import 'routine_insights.dart';
 
 class ProgressScreen extends ConsumerStatefulWidget {
   const ProgressScreen({super.key});
@@ -26,18 +28,25 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(appControllerProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Insights'), actions: [
-        IconButton(
+      appBar: AppBar(
+        title: const Text('Insights'),
+        actions: [
+          LiquidGlassIconButton(
+            settings: arcControlGlassSettings,
             onPressed: () => context.push('/history'),
             icon: const Icon(Icons.history),
-            tooltip: 'Workout history'),
-        IconButton(
+            tooltip: 'Workout history',
+          ),
+          LiquidGlassIconButton(
+            settings: arcControlGlassSettings,
             onPressed: async.value == null
                 ? null
                 : () => _measurement(context, ref, async.value!),
             icon: const Icon(Icons.add),
-            tooltip: 'Log body weight')
-      ]),
+            tooltip: 'Log body weight',
+          ),
+        ],
+      ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
@@ -47,24 +56,39 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
   }
 
   Widget _body(AppData data) {
-    final completed = data.sessions.where((s) => s.complete).toList();
+    final completed = data.sessions
+        .where((s) => s.complete && !s.startedAt.isAfter(DateTime.now()))
+        .toList();
     final weeks = weeklyTraining(completed, DateTime.now());
     final summary = trainingSummary(completed, DateTime.now());
-    final volume = completed.fold<double>(0, (sum, s) => sum + s.volume);
-    final records = _records(data);
+    final volume = completed.fold<double>(
+      0,
+      (sum, s) => sum + routineValue(s, RoutineMetric.volume, data: data),
+    );
+    final records = _records(data.copyWith(sessions: completed));
     final available = data.exercises
-        .where((e) => completed.any((s) => s.exercises.any((log) =>
-            log.exerciseId == e.id &&
-            log.sets
-                .any((set) => set.completed && set.kind != SetKind.warmup))))
+        .where(
+          (e) => completed.any(
+            (s) => s.exercises.any(
+              (log) =>
+                  log.exerciseId == e.id &&
+                  log.sets.any(
+                    (set) => set.completed && set.kind != SetKind.warmup,
+                  ),
+            ),
+          ),
+        )
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     final recentSessions = [...completed]
       ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
     final recentExerciseId = recentSessions
         .expand((s) => s.exercises)
-        .where((log) =>
-            log.sets.any((set) => set.completed && set.kind != SetKind.warmup))
+        .where(
+          (log) => log.sets.any(
+            (set) => set.completed && set.kind != SetKind.warmup,
+          ),
+        )
         .map((log) => log.exerciseId)
         .firstOrNull;
     final exercise = available.where((e) => e.id == selectedId).firstOrNull ??
@@ -77,186 +101,306 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
         : metrics.firstOrNull;
     final points = exercise == null || metric == null
         ? <TrendPoint>[]
-        : exerciseTrend(completed, exercise.id, metric, range, DateTime.now());
+        : exerciseTrend(
+            completed,
+            exercise.id,
+            metric,
+            range,
+            DateTime.now(),
+            data: data,
+          );
     final bodyPoints = [...data.measurements]
       ..sort((a, b) => a.date.compareTo(b.date));
-    return ListView(children: [
-      Padding(
+    return ListView(
+      children: [
+        Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           child: ArcPanel(
-              color: ArcColors.raised,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            color: ArcColors.raised,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Eyebrow('Last 4 weeks', color: ArcColors.blue),
+                const SizedBox(height: 8),
+                Text(
+                  '${summary.workouts} workouts',
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _trainingMessage(summary),
+                  style: const TextStyle(color: ArcColors.muted, height: 1.35),
+                ),
+                const SizedBox(height: 16),
+                Row(
                   children: [
-                    const Eyebrow('Last 4 weeks', color: ArcColors.blue),
-                    const SizedBox(height: 8),
-                    Text('${summary.workouts} workouts',
-                        style: const TextStyle(
-                            fontSize: 30, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 4),
-                    Text(_trainingMessage(summary),
-                        style: const TextStyle(
-                            color: ArcColors.muted, height: 1.35)),
-                    const SizedBox(height: 16),
-                    Row(children: [
-                      Expanded(
-                          child: _MiniStat(
-                              '${summary.workingSets}', 'WORKING SETS')),
-                      Expanded(
-                          child: _MiniStat(
-                              '${_streak(completed)}', 'WEEK STREAK')),
-                      Expanded(
-                          child: _MiniStat(
-                              _compact(weightForDisplay(volume, data.useKg)),
-                              'LIFETIME ${weightUnit(data.useKg).toUpperCase()}')),
-                    ]),
-                  ]))),
-      const SectionHeader('Training rhythm'),
-      Padding(
+                    Expanded(
+                      child: _MiniStat(
+                        '${summary.workingSets}',
+                        'WORKING SETS',
+                      ),
+                    ),
+                    Expanded(
+                      child: _MiniStat('${_streak(completed)}', 'WEEK STREAK'),
+                    ),
+                    Expanded(
+                      child: _MiniStat(
+                        _compact(weightForDisplay(volume, data.useKg)),
+                        'LIFETIME ${weightUnit(data.useKg).toUpperCase()}',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SectionHeader('Training rhythm'),
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(children: [
-            Expanded(
+          child: Row(
+            children: [
+              Expanded(
                 child: Text(
-                    showSets
-                        ? 'Working sets per week'
-                        : 'Completed workouts per week',
-                    style:
-                        const TextStyle(color: ArcColors.muted, fontSize: 12))),
-            TextButton(
+                  showSets
+                      ? 'Working sets per week'
+                      : 'Completed workouts per week',
+                  style: const TextStyle(color: ArcColors.muted, fontSize: 12),
+                ),
+              ),
+              TextButton(
                 onPressed: () => setState(() => showSets = !showSets),
-                child: Text(showSets ? 'Show workouts' : 'Show sets')),
-          ])),
-      SizedBox(
+                child: Text(showSets ? 'Show workouts' : 'Show sets'),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
           height: 205,
           child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: _WeeklyChart(weeks, showSets: showSets))),
-      const SectionHeader('Exercise focus'),
-      if (exercise == null)
-        const EmptyState(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: _WeeklyChart(weeks, showSets: showSets),
+          ),
+        ),
+        RoutineInsights(data: data),
+        const SectionHeader('Exercise focus'),
+        if (exercise == null)
+          const EmptyState(
             title: 'No exercise history',
-            body: 'Complete a workout to see performance over time.')
-      else ...[
-        Padding(
+            body: 'Complete a workout to see performance over time.',
+          )
+        else ...[
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               key: ValueKey(exercise.id),
               initialValue: exercise.id,
               decoration: const InputDecoration(labelText: 'Exercise'),
               items: available
-                  .map((e) => DropdownMenuItem(
+                  .map(
+                    (e) => DropdownMenuItem(
                       value: e.id,
-                      child: Text(e.name, overflow: TextOverflow.ellipsis)))
+                      child: Text(e.name, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
                   .toList(),
               onChanged: (id) => setState(() {
                 selectedId = id;
                 selectedMetric = null;
               }),
-            )),
-        const SizedBox(height: 10),
-        Padding(
+            ),
+          ),
+          const SizedBox(height: 10),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<TrendMetric>(
+              isExpanded: true,
               key: ValueKey('${exercise.id}-${metric?.name}'),
               initialValue: metric,
               decoration: const InputDecoration(labelText: 'Track'),
               items: metrics
-                  .map((m) =>
-                      DropdownMenuItem(value: m, child: Text(_metricLabel(m))))
+                  .map(
+                    (m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(_metricLabel(m)),
+                    ),
+                  )
                   .toList(),
               onChanged: (m) => setState(() => selectedMetric = m),
-            )),
-        Padding(
+            ),
+          ),
+          if (exercise.kind == ExerciseKind.assisted)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                'Lower assistance means less help. Effective load = body weight minus assistance.',
+                style: TextStyle(color: ArcColors.blue, fontSize: 12),
+              ),
+            ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Wrap(
-                spacing: 8,
-                children: TrendRange.values
-                    .map((r) => ChoiceChip(
-                          label: Text(_rangeLabel(r)),
-                          selected: r == range,
-                          onSelected: (_) => setState(() => range = r),
-                        ))
-                    .toList())),
-        if (points.isEmpty)
-          const EmptyState(
+              spacing: 8,
+              children: TrendRange.values
+                  .map(
+                    (r) => ChoiceChip(
+                      label: Text(_rangeLabel(r)),
+                      selected: r == range,
+                      onSelected: (_) => setState(() => range = r),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          if (points.isEmpty)
+            EmptyState(
               title: 'No values in this range',
-              body: 'Choose a longer range or log a completed set.')
-        else ...[
-          Padding(
+              body: exercise.kind == ExerciseKind.assisted
+                  ? 'Log completed sets and body weight on or before the workout date for effective load and volume.'
+                  : 'Choose a longer range or log a completed set.',
+            )
+          else ...[
+            Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: ArcPanel(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     const Eyebrow('Latest session', color: ArcColors.blue),
                     const SizedBox(height: 8),
-                    Text(_value(points.last.value, metric!, data.useKg),
-                        style: const TextStyle(
-                            fontSize: 30, fontWeight: FontWeight.w900)),
+                    Text(
+                      _value(points.last.value, metric!, data.useKg),
+                      style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(_exerciseMessage(points),
-                        style: const TextStyle(
-                            color: ArcColors.muted, height: 1.35)),
-                  ]))),
-          SizedBox(
+                    Text(
+                      _exerciseMessage(points),
+                      style: const TextStyle(
+                        color: ArcColors.muted,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _MiniStat(
+                            _value(
+                              points.map((p) => p.value).reduce(
+                                    metric == TrendMetric.assistance
+                                        ? math.min
+                                        : math.max,
+                                  ),
+                              metric,
+                              data.useKg,
+                            ),
+                            'BEST IN RANGE',
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniStat(
+                            '${points.length}',
+                            'SESSIONS TRACKED',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(
               height: 235,
               child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 22, 0),
-                  child: _TrendChart(
-                      points: points,
-                      display: (value) => _value(value, metric, data.useKg)))),
-          Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 22, 0),
+                child: _TrendChart(
+                  points: points,
+                  display: (value) => _value(value, metric, data.useKg),
+                ),
+              ),
+            ),
+            Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: ExpansionTile(
-                  title: const Text('Recent sessions'),
-                  children: points.reversed
-                      .take(5)
-                      .map((point) => ListTile(
-                          title: Text(_value(point.value, metric, data.useKg)),
-                          subtitle:
-                              Text(DateFormat('d MMM yyyy').format(point.date)),
-                          dense: true))
-                      .toList())),
+                title: const Text('Recent sessions'),
+                children: points.reversed
+                    .take(5)
+                    .map(
+                      (point) => ListTile(
+                        title: Text(_value(point.value, metric, data.useKg)),
+                        subtitle: Text(
+                          DateFormat('d MMM yyyy').format(point.date),
+                        ),
+                        dense: true,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
         ],
-      ],
-      const SectionHeader('Personal records'),
-      if (records.isEmpty)
-        const EmptyState(
+        const SectionHeader('Personal records'),
+        if (records.isEmpty)
+          const EmptyState(
             title: 'No records yet',
-            body: 'Complete weighted sets to establish personal records.')
-      else
-        ...records.take(6).map((record) => ListTile(
-            title: Text(record.name),
-            subtitle: Text(
-                'Estimated 1RM · ${formatWeight(record.weight, data.useKg)} ${weightUnit(data.useKg)}'),
-            trailing: Text(
-                '${formatWeight(record.actual, data.useKg)} × ${record.reps}'))),
-      const SectionHeader('Body weight'),
-      if (bodyPoints.isEmpty)
-        const EmptyState(
-            title: 'No measurements', body: 'Log body weight to see the trend.')
-      else ...[
-        SizedBox(
+            body: 'Complete weighted sets to establish personal records.',
+          )
+        else
+          ...records.take(6).map(
+                (record) => ListTile(
+                  title: Text(record.name),
+                  subtitle: Text(
+                    'Estimated 1RM · ${formatWeight(record.weight, data.useKg)} ${weightUnit(data.useKg)}',
+                  ),
+                  trailing: Text(
+                    '${formatWeight(record.actual, data.useKg)} × ${record.reps}',
+                  ),
+                ),
+              ),
+        const SectionHeader('Body weight'),
+        if (bodyPoints.isEmpty)
+          const EmptyState(
+            title: 'No measurements',
+            body: 'Log body weight to see the trend.',
+          )
+        else ...[
+          SizedBox(
             height: 205,
             child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 22, 0),
-                child: _TrendChart(
-                    points: bodyPoints
-                        .map((m) => TrendPoint(m.date, m.weightKg, m.id))
-                        .toList(),
-                    display: (v) =>
-                        '${formatWeight(v, data.useKg)} ${weightUnit(data.useKg)}'))),
-        ...bodyPoints.reversed.take(5).map((m) => ListTile(
-            title: Text(
-                '${formatWeight(m.weightKg, data.useKg)} ${weightUnit(data.useKg)}'),
-            subtitle: Text(DateFormat('d MMM yyyy').format(m.date)),
-            trailing: m.waistCm == null
-                ? null
-                : Text(
-                    '${lengthForDisplay(m.waistCm!, data.useKg).toStringAsFixed(1)} ${lengthUnit(data.useKg)} waist'))),
+              padding: const EdgeInsets.fromLTRB(16, 10, 22, 0),
+              child: _TrendChart(
+                points: bodyPoints
+                    .map((m) => TrendPoint(m.date, m.weightKg, m.id))
+                    .toList(),
+                display: (v) =>
+                    '${formatWeight(v, data.useKg)} ${weightUnit(data.useKg)}',
+              ),
+            ),
+          ),
+          ...bodyPoints.reversed.take(5).map(
+                (m) => ListTile(
+                  title: Text(
+                    '${formatWeight(m.weightKg, data.useKg)} ${weightUnit(data.useKg)}',
+                  ),
+                  subtitle: Text(DateFormat('d MMM yyyy').format(m.date)),
+                  trailing: m.waistCm == null
+                      ? null
+                      : Text(
+                          '${lengthForDisplay(m.waistCm!, data.useKg).toStringAsFixed(1)} ${lengthUnit(data.useKg)} waist',
+                        ),
+                ),
+              ),
+        ],
+        const SizedBox(height: 24),
       ],
-      const SizedBox(height: 24),
-    ]);
+    );
   }
 }
 
@@ -269,69 +413,103 @@ class _TrendChart extends StatelessWidget {
     final minValue = points.map((p) => p.value).reduce(math.min);
     final maxValue = points.map((p) => p.value).reduce(math.max);
     final padding = math.max(
-        (maxValue - minValue) * .12, math.max(maxValue.abs() * .05, 1));
+      (maxValue - minValue) * .12,
+      math.max(maxValue.abs() * .05, 1),
+    );
     final first = points.first.date.millisecondsSinceEpoch.toDouble();
     final last = points.last.date.millisecondsSinceEpoch.toDouble();
     final single = first == last;
     final spots = points
         .asMap()
         .entries
-        .map((entry) => FlSpot(
+        .map(
+          (entry) => FlSpot(
             single
                 ? entry.key.toDouble()
                 : entry.value.date.millisecondsSinceEpoch.toDouble(),
-            entry.value.value))
+            entry.value.value,
+          ),
+        )
         .toList();
-    return LineChart(LineChartData(
-      minX: single ? -1 : first,
-      maxX: single ? math.max(1, spots.length - 1).toDouble() : last,
-      minY: math.max(0, minValue - padding),
-      maxY: maxValue + padding,
-      borderData: FlBorderData(show: false),
-      gridData: FlGridData(
+    return LineChart(
+      LineChartData(
+        minX: single ? -1 : first,
+        maxX: single ? math.max(1, spots.length - 1).toDouble() : last,
+        minY: math.max(0, minValue - padding),
+        maxY: maxValue + padding,
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              const FlLine(color: ArcColors.line, strokeWidth: 1)),
-      titlesData: FlTitlesData(
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              const FlLine(color: ArcColors.line, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 26,
-                  interval: single ? 1 : (last - first) / 3,
-                  getTitlesWidget: (value, _) {
-                    final date = single
-                        ? points.first.date
-                        : DateTime.fromMillisecondsSinceEpoch(value.round());
-                    return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(DateFormat('d MMM').format(date),
-                            style: const TextStyle(
-                                fontSize: 10, color: ArcColors.muted)));
-                  }))),
-      lineBarsData: [
-        LineChartBarData(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 26,
+              interval: single ? 1 : (last - first) / 3,
+              getTitlesWidget: (value, _) {
+                final date = single
+                    ? points.first.date
+                    : DateTime.fromMillisecondsSinceEpoch(value.round());
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    DateFormat('d MMM').format(date),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: ArcColors.muted,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
             spots: spots,
             color: ArcColors.accent,
             barWidth: 2,
             isCurved: false,
             dotData: const FlDotData(show: true),
             belowBarData: BarAreaData(
-                show: true, color: ArcColors.accent.withValues(alpha: .08)))
-      ],
-      lineTouchData: LineTouchData(
+              show: true,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  ArcColors.accent.withValues(alpha: .2),
+                  ArcColors.accent.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+        ],
+        lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-              getTooltipItems: (spots) => spots
-                  .map((s) => LineTooltipItem(
-                      '${DateFormat('d MMM yyyy').format(points[s.spotIndex].date)}\n${display(s.y)}',
-                      const TextStyle(color: ArcColors.text)))
-                  .toList())),
-    ));
+            getTooltipItems: (spots) => spots
+                .map(
+                  (s) => LineTooltipItem(
+                    '${DateFormat('d MMM yyyy').format(points[s.spotIndex].date)}\n${display(s.y)}',
+                    const TextStyle(color: ArcColors.text),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -342,52 +520,72 @@ class _WeeklyChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maximum = weeks.fold<int>(
-        0, (m, w) => math.max(m, showSets ? w.workingSets : w.workouts));
-    return BarChart(BarChartData(
-      maxY: math.max(1, maximum).toDouble() * 1.2,
-      borderData: FlBorderData(show: false),
-      gridData: FlGridData(
+      0,
+      (m, w) => math.max(m, showSets ? w.workingSets : w.workouts),
+    );
+    return BarChart(
+      BarChartData(
+        maxY: math.max(1, maximum).toDouble() * 1.2,
+        borderData: FlBorderData(show: false),
+        gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              const FlLine(color: ArcColors.line, strokeWidth: 1)),
-      titlesData: FlTitlesData(
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              const FlLine(color: ArcColors.line, strokeWidth: 1),
+        ),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 28,
-                  getTitlesWidget: (value, _) => Text('${value.round()}',
-                      style: const TextStyle(
-                          color: ArcColors.muted, fontSize: 9)))),
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, _) => Text(
+                '${value.round()}',
+                style: const TextStyle(color: ArcColors.muted, fontSize: 9),
+              ),
+            ),
+          ),
           bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 27,
-                  getTitlesWidget: (value, _) => Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                          DateFormat('d MMM').format(
-                              weeks[value.toInt().clamp(0, weeks.length - 1)]
-                                  .start),
-                          style: const TextStyle(
-                              fontSize: 9, color: ArcColors.muted)))))),
-      barGroups: weeks
-          .asMap()
-          .entries
-          .map((entry) => BarChartGroupData(x: entry.key, barRods: [
-                BarChartRodData(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 27,
+              getTitlesWidget: (value, _) => Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  DateFormat('d MMM').format(
+                    weeks[value.toInt().clamp(0, weeks.length - 1)].start,
+                  ),
+                  style: const TextStyle(fontSize: 9, color: ArcColors.muted),
+                ),
+              ),
+            ),
+          ),
+        ),
+        barGroups: weeks
+            .asMap()
+            .entries
+            .map(
+              (entry) => BarChartGroupData(
+                x: entry.key,
+                barRods: [
+                  BarChartRodData(
                     toY: (showSets
                             ? entry.value.workingSets
                             : entry.value.workouts)
                         .toDouble(),
                     width: 22,
-                    color: ArcColors.accent),
-              ]))
-          .toList(),
-    ));
+                    color: ArcColors.accent,
+                  ),
+                ],
+              ),
+            )
+            .toList(),
+      ),
+    );
   }
 }
 
@@ -396,13 +594,17 @@ class _MiniStat extends StatelessWidget {
   final String value;
   final String label;
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value,
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
-        Text(label,
-            style: const TextStyle(color: ArcColors.muted, fontSize: 9)),
-      ]);
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+          ),
+          Text(label,
+              style: const TextStyle(color: ArcColors.muted, fontSize: 9)),
+        ],
+      );
 }
 
 String _trainingMessage(TrainingSummary summary) {
@@ -431,6 +633,8 @@ String _exerciseMessage(List<TrendPoint> points) {
 }
 
 String _metricLabel(TrendMetric metric) => switch (metric) {
+      TrendMetric.assistance => 'Least assistance',
+      TrendMetric.effectiveLoad => 'Effective load',
       TrendMetric.estimatedMax => 'Estimated 1RM',
       TrendMetric.heaviest => 'Heaviest set',
       TrendMetric.reps => 'Most reps',
@@ -445,6 +649,8 @@ String _rangeLabel(TrendRange range) => switch (range) {
       TrendRange.all => 'All',
     };
 String _value(double value, TrendMetric metric, bool useKg) => switch (metric) {
+      TrendMetric.assistance ||
+      TrendMetric.effectiveLoad ||
       TrendMetric.estimatedMax ||
       TrendMetric.heaviest ||
       TrendMetric.volume =>
@@ -475,16 +681,22 @@ List<_Record> _records(AppData data) {
       final exercise =
           data.exercises.where((e) => e.id == log.exerciseId).firstOrNull;
       if (exercise == null || exercise.kind != ExerciseKind.strength) continue;
-      for (final set in log.sets.where((s) =>
-          s.completed &&
-          s.kind != SetKind.warmup &&
-          s.weightKg > 0 &&
-          s.reps > 0)) {
+      for (final set in log.sets.where(
+        (s) =>
+            s.completed &&
+            s.kind != SetKind.warmup &&
+            s.weightKg > 0 &&
+            s.reps > 0,
+      )) {
         final estimate = set.weightKg * (1 + set.reps / 30);
         final previous = records[log.exerciseId];
         if (previous == null || estimate > previous.weight) {
-          records[log.exerciseId] =
-              _Record(exercise.name, estimate, set.weightKg, set.reps);
+          records[log.exerciseId] = _Record(
+            exercise.name,
+            estimate,
+            set.weightKg,
+            set.reps,
+          );
         }
       }
     }
@@ -495,12 +707,18 @@ List<_Record> _records(AppData data) {
 int _streak(List<WorkoutSession> sessions) {
   final weeks = sessions.map((s) {
     final date = s.startedAt;
-    return DateTime(date.year, date.month, date.day)
-        .subtract(Duration(days: date.weekday - 1));
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).subtract(Duration(days: date.weekday - 1));
   }).toSet();
   var cursor = DateTime.now();
-  cursor = DateTime(cursor.year, cursor.month, cursor.day)
-      .subtract(Duration(days: cursor.weekday - 1));
+  cursor = DateTime(
+    cursor.year,
+    cursor.month,
+    cursor.day,
+  ).subtract(Duration(days: cursor.weekday - 1));
   if (!weeks.contains(cursor))
     cursor = cursor.subtract(const Duration(days: 7));
   var count = 0;
@@ -512,49 +730,60 @@ int _streak(List<WorkoutSession> sessions) {
 }
 
 Future<void> _measurement(
-    BuildContext context, WidgetRef ref, AppData data) async {
+  BuildContext context,
+  WidgetRef ref,
+  AppData data,
+) async {
   final weight = TextEditingController();
   final waist = TextEditingController();
   await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-            title: const Text('Body measurement'),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  controller: weight,
-                  autofocus: true,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                      labelText: 'Weight (${weightUnit(data.useKg)})')),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: waist,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                      labelText:
-                          'Waist (${lengthUnit(data.useKg)}, optional)')),
-            ]),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                  onPressed: () {
-                    final entered = double.tryParse(weight.text);
-                    if (entered == null || entered <= 0) return;
-                    final enteredWaist = double.tryParse(waist.text);
-                    ref.read(appControllerProvider.notifier).addMeasurement(
-                        weightToKilograms(entered, data.useKg),
-                        enteredWaist == null
-                            ? null
-                            : lengthToCentimeters(enteredWaist, data.useKg));
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Save')),
-            ],
-          ));
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Body measurement'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: weight,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Weight (${weightUnit(data.useKg)})',
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: waist,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Waist (${lengthUnit(data.useKg)}, optional)',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        ArcGlassButton(
+          onPressed: () {
+            final entered = double.tryParse(weight.text);
+            if (entered == null || entered <= 0) return;
+            final enteredWaist = double.tryParse(waist.text);
+            ref.read(appControllerProvider.notifier).addMeasurement(
+                  weightToKilograms(entered, data.useKg),
+                  enteredWaist == null
+                      ? null
+                      : lengthToCentimeters(enteredWaist, data.useKg),
+                );
+            Navigator.pop(dialogContext);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
   weight.dispose();
   waist.dispose();
 }

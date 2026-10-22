@@ -1,13 +1,26 @@
 # ArcTrack
 
-ArcTrack is an Android-first Flutter gym tracker for planning training splits,
-logging workouts quickly, and reviewing progress. It is designed as a focused
-training tool: compact layouts, restrained visuals, fast set entry, and no
-account or mandatory cloud service.
+**An offline gym tracker for workout planning, fast logging, and useful progress insights.**
 
-All training data is stored locally in SQLite. Optional JSON backup can write to
-a user-selected local file or a file exposed by Android's Google Drive document
-provider.
+Build repeatable routines, train with your previous values ready, and see how each
+workout plan evolves over time. ArcTrack is an Android-first Flutter application
+with a dark interface, clear set entry, and local SQLite storage.
+
+- **Works offline:** planning, logging, history, and analytics work without an
+  internet connection. No account or subscription is required.
+- **Your data stays on your device:** backups and exports are optional. If you
+  choose a Google Drive file through Android, Drive handles cloud uploads when
+  connectivity is available.
+- **Resume where you left off:** active workouts and completed history are saved
+  locally.
+
+## Screenshots
+
+Flutter-rendered phone previews using sample training data.
+
+| Branded startup | Workout logging | Routine insights |
+| --- | --- | --- |
+| <img src="docs/screenshots/splash.png" width="240" alt="ArcTrack splash screen with offline by design branding"> | <img src="docs/screenshots/workout-logging.png" width="240" alt="Workout cards with previous values, set completion, and progress"> | <img src="docs/screenshots/routine-insights.png" width="240" alt="Workout plan analysis with workload trends and muscle distribution"> |
 
 ## Features
 
@@ -16,7 +29,8 @@ provider.
 - Rolling training rotations with repeatable rest days.
 - Fixed seven-day weekly schedules, including rest and unscheduled days.
 - Custom exercises and reusable workout routines.
-- Strength, bodyweight, timed, and distance exercise types.
+- Strength, bodyweight, assisted, timed, and distance exercise types.
+- Assisted pull-ups and dips with explicit assistance entry and per-workout body weight.
 - Fast workout logging with previous values, set completion, optional advanced
   fields, and exercise-specific rest timers.
 - Add, insert, or remove exercises while a workout is active.
@@ -50,18 +64,49 @@ but keeps historical workouts.
 
 Log weight and repetitions, complete sets, add or remove sets, access optional
 set details, and run the configured rest timer. Exercises can be appended or
-inserted after a particular movement during the session. Changes are autosaved.
+inserted after a particular movement during the session using exercise or muscle
+search. Tap previous values to fill a set, or the set number to edit details.
+A progress bar and per-exercise counts track completion; rest controls support
+adding 30 seconds or skipping. Empty sets cannot be marked complete, and swiped
+sets can be restored with Undo. Changes are autosaved.
 
 ### Insights
 
 Compares four-week workout frequency, shows weekly workouts or working sets on
 their own scale, and charts exercise trends with dated sessions and range
-filters. It also includes body-weight trends and personal records.
+filters, best-in-range results, and session counts. Routine analysis groups
+history by workout-plan ID, with date filters, volume/sets/reps/duration trends,
+latest-versus-previous comparisons, session averages, muscle distribution, and
+session breakdowns. Deleted or renamed routines retain their historical data.
+Workload excludes warmup and unfinished sets. It also includes body-weight trends
+and personal records.
 
 ### History
 
 Open from Insights or Home settings to review or delete completed workouts,
 export CSV/JSON, restore a JSON backup, and configure automatic backup.
+
+## Assisted exercise logging
+
+Choose **assisted** as the tracking type, or use the built-in Assisted Pull-up
+and Assisted Dip exercises. The weight input is the machine's **assistance
+weight**, not an external weight you are lifting.
+
+**Estimated effective load = body weight − assistance weight.** For example,
+80 kg body weight with 20 kg assistance gives an estimated 60 kg effective load;
+10 repetitions contribute 600 kg to working-set volume. Zero assistance is valid.
+Assistance above body weight is clamped to zero effective load.
+
+Set body weight directly in the active workout. Starting a workout also uses the
+latest body measurement available at that time. The value is saved with the
+session, so later body-weight measurements do not rewrite its calculation. Older
+sessions use the latest measurement on or before their workout date. If body
+weight is unavailable, assistance and repetitions remain trackable, while the
+assisted sets are excluded from volume and effective-load trends.
+
+Insights reports **least assistance** (lower means less help), repetitions, and
+effective load separately. This is a simple estimate; machine mechanics and
+movement technique can affect the actual resistance.
 
 ## Backup and restore
 
@@ -105,7 +150,7 @@ The workbook uses these sheets:
 | `workout` | Routine name; use `Rest` for a rest day |
 | `exercise` | Exercise name; leave empty for Rest |
 | `muscle` | Primary muscle group |
-| `type` | `strength`, `bodyweight`, `timed`, or `distance` |
+| `type` | `strength`, `bodyweight`, `assisted`, `timed`, or `distance` |
 | `sets` | Target set count, from 1 to 20 |
 | `reps` | Target repetitions |
 | `rest_seconds` | Rest duration, from 0 to 900 seconds |
@@ -121,7 +166,7 @@ exercises belonging to one routine.
 | `workout` | Workout name |
 | `exercise` | Exercise name |
 | `set` | Set number |
-| `weight_kg` | Weight in kilograms |
+| `weight_kg` | Weight in kilograms; assistance weight for assisted exercises |
 | `reps` | Completed repetitions |
 | `completed` | `true` or `false` |
 
@@ -132,12 +177,16 @@ reimporting the same dated workout does not create another copy.
 
 ### Requirements
 
-- Flutter SDK compatible with Dart `>=3.4.0 <4.0.0`
+- Flutter `>=3.44.0` with Dart `>=3.12.2 <4.0.0`
 - Android SDK with API 36 available
 - Java 17
 - An Android device or emulator
 
 Check the environment and install packages:
+
+The UI currently loads the local `liquid_ui_components` development checkout
+from `../mahila-mitr/liquid_retina_navigation`. Keep that sibling checkout in
+place when running `flutter pub get`; it provides the morph and interaction APIs.
 
 ```powershell
 flutter doctor
@@ -149,6 +198,19 @@ Run the app:
 ```powershell
 flutter run
 ```
+
+For device performance checks, use `flutter run --profile`; debug builds include
+development overhead. Glass panels use translucent tints and painted rims with
+zero backdrop blur, no optical shaders, and no blurred shadows. The Home morph
+remains animated, and small controls use reduced press dynamics.
+
+Build the release APK for everyday use:
+
+```powershell
+flutter build apk --release
+```
+
+Output: `build/app/outputs/flutter-apk/app-release.apk`.
 
 Run static analysis and tests:
 
@@ -181,7 +243,7 @@ lib/
 ```
 
 - **Riverpod** manages application state and autosave coordination.
-- **GoRouter** provides the five-section navigation shell.
+- **GoRouter** provides the four-section navigation shell and workout history route.
 - **Drift/SQLite** stores a serialized, version-tolerant local data model.
 - Stable IDs keep domain records independent from presentation and allow a
   future repository implementation to add synchronization.
@@ -191,7 +253,7 @@ lib/
 ## Data and privacy
 
 - No account is required.
-- No analytics, advertising, or social features are included.
+- No telemetry, advertising, or social tracking is included. Training analytics are calculated locally.
 - The primary database stays inside the app's private storage.
 - ArcTrack accesses a backup file only after the user selects it through the
   Android system picker.

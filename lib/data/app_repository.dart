@@ -53,6 +53,16 @@ AppData seedData() {
         muscle: 'Back',
         kind: ExerciseKind.bodyweight),
     Exercise(
+        id: 'assisted_pullup',
+        name: 'Assisted Pull-up',
+        muscle: 'Back',
+        kind: ExerciseKind.assisted),
+    Exercise(
+        id: 'assisted_dip',
+        name: 'Assisted Dip',
+        muscle: 'Triceps',
+        kind: ExerciseKind.assisted),
+    Exercise(
         id: 'plank', name: 'Plank', muscle: 'Core', kind: ExerciseKind.timed),
     Exercise(
         id: 'run',

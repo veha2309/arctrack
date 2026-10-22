@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:liquid_ui_components/liquid_ui_components.dart';
 import 'theme.dart';
+
+void showArcToast(BuildContext context, String message,
+    {IconData? icon = Icons.check_circle_outline_rounded,
+    SnackBarAction? action,
+    Duration duration = const Duration(seconds: 3)}) {
+  LiquidGlassToast.show(context,
+      message: message,
+      icon: icon,
+      action: action,
+      persist: false,
+      duration: duration,
+      settings:
+          arcControlGlassSettings.copyWith(opacity: .85, dynamicsIntensity: 0));
+}
 
 class SectionHeader extends StatelessWidget {
   const SectionHeader(this.title, {super.key, this.trailing});
@@ -7,41 +22,62 @@ class SectionHeader extends StatelessWidget {
   final Widget? trailing;
   @override
   Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
-      child: Row(children: [
-        Expanded(
-            child: Text(title.toUpperCase(),
+        padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title.toUpperCase(),
                 style: const TextStyle(
-                    color: ArcColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1))),
-        if (trailing != null) trailing!
-      ]));
+                  color: ArcColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            if (trailing != null) trailing!,
+          ],
+        ),
+      );
 }
 
 class Metric extends StatelessWidget {
-  const Metric(
-      {super.key, required this.label, required this.value, this.detail});
+  const Metric({
+    super.key,
+    required this.label,
+    required this.value,
+    this.detail,
+  });
   final String label;
   final String value;
   final String? detail;
   @override
   Widget build(BuildContext context) => Expanded(
-      child: Padding(
+        child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label,
-                style: const TextStyle(color: ArcColors.muted, fontSize: 11)),
-            const SizedBox(height: 3),
-            Text(value,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(color: ArcColors.muted, fontSize: 11),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
                 style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            if (detail != null)
-              Text(detail!,
-                  style: const TextStyle(color: ArcColors.muted, fontSize: 11))
-          ])));
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              if (detail != null)
+                Text(
+                  detail!,
+                  style: const TextStyle(color: ArcColors.muted, fontSize: 11),
+                ),
+            ],
+          ),
+        ),
+      );
 }
 
 class EmptyState extends StatelessWidget {
@@ -50,34 +86,64 @@ class EmptyState extends StatelessWidget {
   final String body;
   @override
   Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        Text(body,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: ArcColors.muted))
-      ]));
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: ArcColors.muted),
+            ),
+          ],
+        ),
+      );
 }
 
 class ArcPanel extends StatelessWidget {
-  const ArcPanel(
-      {super.key,
-      required this.child,
-      this.padding = const EdgeInsets.all(18),
-      this.color});
+  const ArcPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.color,
+  });
   final Widget child;
   final EdgeInsets padding;
   final Color? color;
   @override
-  Widget build(BuildContext context) => Material(
-        color: color ?? ArcColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: ArcColors.line),
+  Widget build(BuildContext context) => RepaintBoundary(
+          child: LiquidGlassSurface(
+        settings:
+            (LiquidGlassTheme.maybeOf(context) ?? arcGlassSettings).copyWith(
+          tintColor: color,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(padding: padding, child: child),
+        borderRadius: BorderRadius.circular(18),
+        padding: padding,
+        child: Material(type: MaterialType.transparency, child: child),
+      ));
+}
+
+class ArcGlassButton extends StatelessWidget {
+  const ArcGlassButton({
+    super.key,
+    required this.onPressed,
+    required this.child,
+  });
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LiquidGlassButton(
+        settings: arcControlGlassSettings.copyWith(
+          tintColor: ArcColors.accent,
+          foregroundColor: ArcColors.text,
+          opacity: .23,
+          borderWidth: 1.1,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        onPressed: onPressed,
+        child: child,
       );
 }
 
@@ -86,10 +152,13 @@ class Eyebrow extends StatelessWidget {
   final String text;
   final Color color;
   @override
-  Widget build(BuildContext context) => Text(text.toUpperCase(),
-      style: TextStyle(
+  Widget build(BuildContext context) => Text(
+        text.toUpperCase(),
+        style: TextStyle(
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.w800,
-          letterSpacing: 1.2));
+          letterSpacing: 1.2,
+        ),
+      );
 }

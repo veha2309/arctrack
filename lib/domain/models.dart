@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum ExerciseKind { strength, bodyweight, timed, distance }
+enum ExerciseKind { strength, bodyweight, assisted, timed, distance }
 
 enum SetKind { warmup, working, drop, failure }
 
@@ -229,12 +229,14 @@ class WorkoutSession {
       required this.startedAt,
       required this.exercises,
       this.completedAt,
-      this.templateId});
+      this.templateId,
+      this.bodyWeightKg});
   final String id;
   final String name;
   final DateTime startedAt;
   final DateTime? completedAt;
   final String? templateId;
+  final double? bodyWeightKg;
   final List<ExerciseLog> exercises;
   bool get complete => completedAt != null;
   double get volume => exercises.fold(0, (sum, e) => sum + e.volume);
@@ -244,13 +246,16 @@ class WorkoutSession {
           sum +
           e.sets.where((s) => s.completed && s.kind != SetKind.warmup).length);
   WorkoutSession copyWith(
-          {List<ExerciseLog>? exercises, DateTime? completedAt}) =>
+          {List<ExerciseLog>? exercises,
+          DateTime? completedAt,
+          double? bodyWeightKg}) =>
       WorkoutSession(
           id: id,
           name: name,
           startedAt: startedAt,
           completedAt: completedAt ?? this.completedAt,
           templateId: templateId,
+          bodyWeightKg: bodyWeightKg ?? this.bodyWeightKg,
           exercises: exercises ?? this.exercises);
   Map<String, Object?> toJson() => {
         'id': id,
@@ -258,6 +263,7 @@ class WorkoutSession {
         'startedAt': startedAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
         'templateId': templateId,
+        'bodyWeightKg': bodyWeightKg,
         'exercises': exercises.map((e) => e.toJson()).toList()
       };
   factory WorkoutSession.fromJson(Map<String, dynamic> j) => WorkoutSession(
@@ -267,6 +273,7 @@ class WorkoutSession {
       completedAt:
           j['completedAt'] == null ? null : DateTime.parse(j['completedAt']),
       templateId: j['templateId'],
+      bodyWeightKg: (j['bodyWeightKg'] as num?)?.toDouble(),
       exercises: (j['exercises'] as List)
           .map((e) => ExerciseLog.fromJson(Map<String, dynamic>.from(e)))
           .toList());
@@ -362,6 +369,31 @@ class AppData {
         : (rotation.isEmpty ? null : rotation[rotationIndex % rotation.length]);
     return id == null ? null : templates.where((e) => e.id == id).firstOrNull;
   }
+
+  double? bodyWeightAt(DateTime date) {
+    final prior = measurements
+        .where((m) => !m.date.isAfter(date) && m.weightKg > 0)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return prior.firstOrNull?.weightKg;
+  }
+
+  double? setLoad(WorkoutSession session, ExerciseLog log, LoggedSet set) {
+    final exercise = exercises.where((e) => e.id == log.exerciseId).firstOrNull;
+    if (exercise?.kind != ExerciseKind.assisted) return set.weightKg;
+    final body = session.bodyWeightKg ?? bodyWeightAt(session.startedAt);
+    if (body == null || body <= 0) return null;
+    return (body - set.weightKg).clamp(0, body).toDouble();
+  }
+
+  double sessionVolume(WorkoutSession session) => session.exercises.fold(
+      0.0,
+      (sum, log) =>
+          sum +
+          log.sets.where((s) => s.completed && s.kind != SetKind.warmup).fold(
+              0.0,
+              (volume, set) =>
+                  volume + (setLoad(session, log, set) ?? 0) * set.reps));
 
   AppData copyWith(
           {List<Exercise>? exercises,

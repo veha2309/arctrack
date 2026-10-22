@@ -26,7 +26,11 @@ class AppController extends AsyncNotifier<AppData> {
   @override
   Future<AppData> build() async {
     ref.onDispose(() => _saveTimer?.cancel());
-    return await _repository.load() ?? seedData();
+    final data = await _repository.load() ?? seedData();
+    final assisted = seedData().exercises.where((e) =>
+        e.kind == ExerciseKind.assisted &&
+        !data.exercises.any((old) => old.id == e.id));
+    return data.copyWith(exercises: [...data.exercises, ...assisted]);
   }
 
   void _set(AppData next) {
@@ -73,6 +77,7 @@ class AppController extends AsyncNotifier<AppData> {
             name: template.name,
             startedAt: DateTime.now(),
             templateId: template.id,
+            bodyWeightKg: data.bodyWeightAt(DateTime.now()),
             exercises: logs)));
   }
 
@@ -87,6 +92,14 @@ class AppController extends AsyncNotifier<AppData> {
       }
     }
     return null;
+  }
+
+  void setWorkoutBodyWeight(double kilograms) {
+    final data = state.requireValue;
+    final session = data.activeSession;
+    if (session == null || !kilograms.isFinite || kilograms <= 0) return;
+    _set(data.copyWith(
+        activeSession: session.copyWith(bodyWeightKg: kilograms)));
   }
 
   void updateSet(int exerciseIndex, int setIndex, LoggedSet value) {
@@ -119,6 +132,20 @@ class AppController extends AsyncNotifier<AppData> {
     final session = data.activeSession!;
     final exercises = [...session.exercises];
     final sets = [...exercises[exerciseIndex].sets]..removeAt(setIndex);
+    exercises[exerciseIndex] = exercises[exerciseIndex].copyWith(sets: sets);
+    _set(data.copyWith(activeSession: session.copyWith(exercises: exercises)));
+  }
+
+  void restoreSet(String sessionId, String logId, int index, LoggedSet value) {
+    final data = state.requireValue;
+    final session = data.activeSession;
+    if (session == null || session.id != sessionId) return;
+    final exerciseIndex = session.exercises.indexWhere((e) => e.id == logId);
+    if (exerciseIndex < 0) return;
+    final exercises = [...session.exercises];
+    final sets = [...exercises[exerciseIndex].sets];
+    if (sets.any((s) => s.id == value.id)) return;
+    sets.insert(index.clamp(0, sets.length), value);
     exercises[exerciseIndex] = exercises[exerciseIndex].copyWith(sets: sets);
     _set(data.copyWith(activeSession: session.copyWith(exercises: exercises)));
   }
@@ -355,10 +382,15 @@ class AppController extends AsyncNotifier<AppData> {
 
   void applyBulkImport(AppData imported) => _set(imported);
 
-  String exportCsv() {
-    final rows = ['date,workout,exercise,set,weight_kg,reps,volume'];
+  String exportCsv({String? sessionId}) {
+    final rows = [
+      'date,workout,exercise,set,weight_kg,reps,volume,exercise_type,effective_weight_kg'
+    ];
     final d = state.requireValue;
-    for (final s in d.sessions) {
+    final sessions = sessionId == null
+        ? d.sessions
+        : [d.sessions.firstWhere((session) => session.id == sessionId)];
+    for (final s in sessions) {
       for (final e in s.exercises) {
         final name =
             d.exercises.where((x) => x.id == e.exerciseId).firstOrNull?.name ??
@@ -367,7 +399,7 @@ class AppController extends AsyncNotifier<AppData> {
           final set = e.sets[i];
           if (set.completed)
             rows.add(
-                '${s.startedAt.toIso8601String()},${jsonEncode(s.name)},${jsonEncode(name)},${i + 1},${set.weightKg},${set.reps},${set.volume}');
+                '${s.startedAt.toIso8601String()},${jsonEncode(s.name)},${jsonEncode(name)},${i + 1},${set.weightKg},${set.reps},${set.kind == SetKind.warmup ? 0 : (d.setLoad(s, e, set) ?? 0) * set.reps},${d.exercises.where((x) => x.id == e.exerciseId).firstOrNull?.kind.name ?? 'strength'},${d.setLoad(s, e, set) ?? ''}');
         }
       }
     }

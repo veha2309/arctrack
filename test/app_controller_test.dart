@@ -7,6 +7,40 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('CSV export can select one workout without changing history', () async {
+    WorkoutSession workout(String id, String name) => WorkoutSession(
+          id: id,
+          name: name,
+          startedAt: DateTime.utc(2026, 10, 22),
+          exercises: const [
+            ExerciseLog(id: 'bench-log', exerciseId: 'bench', sets: [
+              LoggedSet(id: 'done', weightKg: 50, reps: 8, completed: true),
+              LoggedSet(id: 'unfinished', weightKg: 60, reps: 10),
+            ]),
+          ],
+        );
+    final container = ProviderContainer(overrides: [
+      repositoryProvider
+          .overrideWithValue(_MemoryRepository(seedData().copyWith(sessions: [
+        workout('first', 'Push A'),
+        workout('second', 'Push B'),
+      ]))),
+    ]);
+    addTearDown(container.dispose);
+    await container.read(appControllerProvider.future);
+    final controller = container.read(appControllerProvider.notifier);
+
+    final csv = controller.exportCsv(sessionId: 'second');
+    expect(csv.split('\n'), hasLength(2));
+    expect(csv, contains('"Push B"'));
+    expect(csv, isNot(contains('"Push A"')));
+    expect(csv, contains(',1,50.0,8,400.0,strength,50.0'));
+    expect(controller.exportCsv().split('\n'), hasLength(3));
+    expect(container.read(appControllerProvider).requireValue.sessions,
+        hasLength(2));
+    expect(() => controller.exportCsv(sessionId: 'missing'), throwsStateError);
+  });
+
   test('exercise can be inserted and removed during an active workout',
       () async {
     final repository = _MemoryRepository(seedData());
